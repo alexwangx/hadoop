@@ -376,5 +376,9 @@ public class CommonConfigurationKeysPublic {
     "hadoop.security.random.device.file.path";
   public static final String HADOOP_SECURITY_SECURE_RANDOM_DEVICE_FILE_PATH_DEFAULT = 
     "/dev/urandom";
+
+  public static final String HDFS_SPECIAL_TRASH_PATH_KEY =
+          "fs.special.trash.path";
+
 }
 

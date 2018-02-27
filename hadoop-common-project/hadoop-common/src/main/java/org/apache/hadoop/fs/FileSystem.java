@@ -1843,6 +1843,31 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
 
+  /** Return the current user's home directory in this filesystem.
+   * The default implementation returns "/user/$USER/".
+   */
+  public Path getHomeDirectory(Configuration conf) {
+
+  //<property>
+  //    <name>fs.special.trash.path</name>
+  //    <value>semacare,/thirdparty/semacare</value>
+  //</property>
+    String special_path = conf.get(CommonConfigurationKeys.HDFS_SPECIAL_TRASH_PATH_KEY,"not.set.path");
+    String[] userTrashs = StringUtils.split(special_path, ';');
+    for (int i = 0; i < userTrashs.length; i++) {
+      String[] users = StringUtils.split(userTrashs[i], ',');
+      if(users[0].equals(System.getProperty("user.name")) && users.length == 2){
+        LOG.debug("special trash user is:" + users[0]);
+        LOG.debug("special trash path is:" + users[1]);
+        return this.makeQualified(new Path(users[1]));
+      }
+    }
+
+    return this.makeQualified(
+            new Path("/user/"+System.getProperty("user.name")));
+  }
+
+
   /**
    * Set the current working directory for the given file system. All relative
    * paths will be resolved relative to it.
