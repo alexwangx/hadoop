@@ -58,6 +58,7 @@ import org.apache.hadoop.fs.LocalFileSystem;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.StorageType;
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.ExtendedBlockId;
 import org.apache.hadoop.hdfs.protocol.Block;
@@ -115,6 +116,7 @@ import org.apache.hadoop.util.DiskChecker.DiskOutOfSpaceException;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -3141,6 +3143,25 @@ class FsDatasetImpl implements FsDatasetSpi<FsVolumeImpl> {
       }
       s.add(blockId);
     }
+  }
+
+  @Override
+  public void hardLinkOneBlock(ExtendedBlock srcBlock, ExtendedBlock dstBlock) throws IOException {
+    BlockLocalPathInfo blpi = getBlockLocalPathInfo(srcBlock);
+    File src = new File(blpi.getBlockPath());
+    File srcMeta = new File(blpi.getMetaPath());
+
+    if(getVolume(srcBlock).getAvailable() < dstBlock.getNumBytes()) {
+      throw new DiskOutOfSpaceException("Insufficient space for hardlink block " + srcBlock);
+    }
+
+    BlockPoolSlice dstBPS = getVolume(srcBlock).getBlockPoolSlice(dstBlock.getBlockPoolId());
+
+    File dstBlockFile = dstBPS.hardLinkOneBlock(src, srcMeta, dstBlock.getLocalBlock());
+    dstBlockFile = dstBPS.addBlock(dstBlock.getLocalBlock(), dstBlockFile);
+
+    ReplicaInfo replicaInfo = new FinalizedReplica(dstBlock.getLocalBlock(), getVolume(srcBlock), dstBlockFile.getParentFile());
+    volumeMap.add(dstBlock.getBlockPoolId(), replicaInfo);
   }
 
   synchronized void stopAllDataxceiverThreads(FsVolumeImpl volume) {

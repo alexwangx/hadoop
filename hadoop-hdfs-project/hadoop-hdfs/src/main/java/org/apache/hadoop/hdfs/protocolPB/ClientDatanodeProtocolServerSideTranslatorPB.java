@@ -30,6 +30,8 @@ import org.apache.hadoop.hdfs.client.BlockReportOptions;
 import org.apache.hadoop.hdfs.protocol.BlockLocalPathInfo;
 import org.apache.hadoop.hdfs.protocol.ClientDatanodeProtocol;
 import org.apache.hadoop.hdfs.protocol.HdfsBlocksMetadata;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.CopyBlockRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.CopyBlockResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.DeleteBlockPoolRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.DeleteBlockPoolResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetBlockLocalPathInfoRequestProto;
@@ -42,6 +44,9 @@ import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetRec
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetHdfsBlockLocationsRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetHdfsBlockLocationsResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetHdfsBlockLocationsResponseProto.Builder;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetReconfigurationStatusConfigChangeProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetReconfigurationStatusRequestProto;
+import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetReconfigurationStatusResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetReplicaVisibleLengthRequestProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.GetReplicaVisibleLengthResponseProto;
 import org.apache.hadoop.hdfs.protocol.proto.ClientDatanodeProtocolProtos.RefreshNamenodesRequestProto;
@@ -56,6 +61,7 @@ import org.apache.hadoop.hdfs.security.token.block.BlockTokenIdentifier;
 import org.apache.hadoop.security.proto.SecurityProtos.TokenProto;
 import org.apache.hadoop.security.token.Token;
 
+import com.google.common.base.Optional;
 import com.google.common.primitives.Longs;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcController;
@@ -79,12 +85,27 @@ public class ClientDatanodeProtocolServerSideTranslatorPB implements
       StartReconfigurationResponseProto.newBuilder().build();
   private final static TriggerBlockReportResponseProto TRIGGER_BLOCK_REPORT_RESP =
       TriggerBlockReportResponseProto.newBuilder().build();
-  
+  private final static CopyBlockResponseProto COPY_BLOCK_RESP =
+          CopyBlockResponseProto.newBuilder().build();
+
   private final ClientDatanodeProtocol impl;
 
   public ClientDatanodeProtocolServerSideTranslatorPB(
       ClientDatanodeProtocol impl) {
     this.impl = impl;
+  }
+
+  @Override
+  public CopyBlockResponseProto copyBlock(RpcController controller,
+                                          CopyBlockRequestProto request) throws ServiceException {
+    try {
+      impl.copyBlock(PBHelper.convert(request.getSrcBlock()),
+              PBHelper.convert(request.getDstBlock()),
+              PBHelper.convert(request.getDstDn()));
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
+    return COPY_BLOCK_RESP;
   }
 
   @Override

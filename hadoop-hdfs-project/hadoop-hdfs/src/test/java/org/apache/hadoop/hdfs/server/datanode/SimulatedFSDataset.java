@@ -1345,5 +1345,10 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   public boolean isDeletingBlock(String bpid, long blockId) {
     throw new UnsupportedOperationException();
   }
+
+  @Override
+  public void hardLinkOneBlock(ExtendedBlock srcBlock, ExtendedBlock dstBlock) {
+        throw new UnsupportedOperationException();
+  }
 }
 

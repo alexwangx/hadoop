@@ -45,6 +45,7 @@ import org.apache.hadoop.hdfs.server.datanode.FinalizedReplica;
 import org.apache.hadoop.hdfs.server.datanode.Replica;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaInPipelineInterface;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaHandler;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaInPipelineInterface;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaInfo;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaNotFoundException;
 import org.apache.hadoop.hdfs.server.datanode.StorageLocation;
@@ -554,4 +555,17 @@ public interface FsDatasetSpi<V extends FsVolumeSpi> extends FSDatasetMBean {
    * Confirm whether the block is deleting
    */
   public boolean isDeletingBlock(String bpid, long blockId);
+
+  /**
+   * Copies over a block from a block file
+   *
+   * @param srcBlock
+   *          the source block which needs to be copied
+   * @param dstBlock
+   *          the destination block to which the srcBlock needs to be copied to
+   * @throws IOException
+   */
+  public void hardLinkOneBlock(ExtendedBlock srcBlock, ExtendedBlock dstBlock)
+      throws IOException;
+
 }

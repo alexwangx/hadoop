@@ -106,20 +106,20 @@ public class DU extends Shell {
         CommonConfigurationKeys.FS_DU_INTERVAL_DEFAULT),
         conf.getLong(JITTER_KEY, DEFAULT_JITTER), initialUsed);
   }
-    
-  
+
+
 
   /**
    * This thread refreshes the "used" variable.
-   * 
+   *
    * Future improvements could be to not permanently
    * run this thread, instead run when getUsed is called.
    **/
   class DURefreshThread implements Runnable {
-    
+
     @Override
     public void run() {
-      
+
       while(shouldRun) {
 
         try {
@@ -130,7 +130,7 @@ public class DU extends Shell {
                 ThreadLocalRandom.current().nextLong(-jitter, jitter);
           }
           Thread.sleep(thisRefreshInterval);
-          
+
           try {
             //update the used variable
             DU.this.run();
@@ -139,7 +139,7 @@ public class DU extends Shell {
               //save the latest exception so we can return it in getUsed()
               duException = e;
             }
-            
+
             LOG.warn("Could not get disk usage information", e);
           }
         } catch (InterruptedException e) {
@@ -147,7 +147,7 @@ public class DU extends Shell {
       }
     }
   }
-  
+
   /**
    * Decrease how much disk space we use.
    * @param value decrease by this value
@@ -163,9 +163,9 @@ public class DU extends Shell {
   public void incDfsUsed(long value) {
     used.addAndGet(value);
   }
-  
+
   /**
-   * @return disk space used 
+   * @return disk space used
    * @throws IOException if the shell command fails
    */
   public long getUsed() throws IOException {
@@ -182,7 +182,7 @@ public class DU extends Shell {
         }
       }
     }
-    
+
     return Math.max(used.longValue(), 0L);
   }
 
@@ -206,31 +206,31 @@ public class DU extends Shell {
     }
     super.run();
   }
-  
+
   /**
    * Start the disk usage checking thread.
    */
   public void start() {
     //only start the thread if the interval is sane
     if(refreshInterval > 0) {
-      refreshUsed = new Thread(new DURefreshThread(), 
+      refreshUsed = new Thread(new DURefreshThread(),
           "refreshUsed-"+dirPath);
       refreshUsed.setDaemon(true);
       refreshUsed.start();
     }
   }
-  
+
   /**
    * Shut down the refreshing thread.
    */
   public void shutdown() {
     this.shouldRun = false;
-    
+
     if(this.refreshUsed != null) {
       this.refreshUsed.interrupt();
     }
   }
-  
+
   @Override
   public String toString() {
     return
@@ -242,7 +242,7 @@ public class DU extends Shell {
   protected String[] getExecString() {
     return new String[] {"du", "-sk", dirPath};
   }
-  
+
   @Override
   protected void parseExecResult(BufferedReader lines) throws IOException {
     String line = lines.readLine();
@@ -263,5 +263,33 @@ public class DU extends Shell {
     }
 
     System.out.println(new DU(new File(path), new Configuration()).toString());
+  }
+
+  protected Runnable getNewRefreshThreadInstance() {
+    return new DURefreshThread();
+  }
+
+  protected void setUsed(long used) {
+    this.used.set(used);
+  }
+
+  public boolean isShouldRun() {
+    return shouldRun;
+  }
+
+  public Thread getRefreshUsed() {
+    return refreshUsed;
+  }
+
+  public IOException getDuException() {
+    return duException;
+  }
+
+  public long getRefreshInterval() {
+    return refreshInterval;
+  }
+
+  public void setDuException(IOException duException) {
+    this.duException = duException;
   }
 }

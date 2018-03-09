@@ -37,6 +37,7 @@ HADOOP_LIBEXEC_DIR=${HADOOP_LIBEXEC_DIR:-$DEFAULT_LIBEXEC_DIR}
 function print_usage(){
   echo "Usage: hdfs [--config confdir] [--loglevel loglevel] COMMAND"
   echo "       where COMMAND is one of:"
+  echo "  fastcp               run fastcp"
   echo "  dfs                  run a filesystem command on the file systems supported in Hadoop."
   echo "  classpath            prints the classpath"
   echo "  namenode -format     format the DFS filesystem"
@@ -163,6 +164,8 @@ elif [ "$COMMAND" = "haadmin" ] ; then
 elif [ "$COMMAND" = "fsck" ] ; then
   CLASS=org.apache.hadoop.hdfs.tools.DFSck
   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_CLIENT_OPTS"
+elif [ "$COMMAND" = "fastcp" ] ; then
+  CLASS=org.apache.hadoop.hdfs.FastCopy
 elif [ "$COMMAND" = "balancer" ] ; then
   CLASS=org.apache.hadoop.hdfs.server.balancer.Balancer
   HADOOP_OPTS="$HADOOP_OPTS $HADOOP_BALANCER_OPTS"

@@ -145,6 +145,16 @@ message ShutdownDatanodeResponseProto {
 message GetDatanodeInfoRequestProto {
 }
 
+message CopyBlockRequestProto {
+  required ExtendedBlockProto srcBlock = 1;
+  required ExtendedBlockProto dstBlock = 2;
+  required DatanodeInfoProto dstDn = 3;
+}
+
+message CopyBlockResponseProto {
+}
+
+
 message GetDatanodeInfoResponseProto {
   required DatanodeLocalInfoProto localInfo = 1;
 }
@@ -185,6 +195,9 @@ message GetReconfigurationStatusResponseProto {
  * See the request and response for details of rpc call.
  */
 service ClientDatanodeProtocolService {
+
+  rpc copyBlock(CopyBlockRequestProto)
+      returns(CopyBlockResponseProto);
   /**
    * Returns the visible length of the replica
    */

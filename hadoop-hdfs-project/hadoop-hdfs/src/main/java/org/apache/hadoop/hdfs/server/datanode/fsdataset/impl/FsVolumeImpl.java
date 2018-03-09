@@ -17,14 +17,18 @@
  */
 package org.apache.hadoop.hdfs.server.datanode.fsdataset.impl;
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.RandomAccessFile;
-import java.nio.channels.ClosedChannelException;
 import java.io.OutputStreamWriter;
+import java.nio.channels.ClosedChannelException;
+import java.nio.channels.ClosedChannelException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -32,6 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -44,9 +49,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import org.apache.commons.lang.math.NumberUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.DF;
+import org.apache.hadoop.fs.DU;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
@@ -58,7 +65,9 @@ import org.apache.hadoop.hdfs.server.datanode.DatanodeUtil;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
+import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
+import org.apache.hadoop.util.CloseableReferenceCount;
 import org.apache.hadoop.util.CloseableReferenceCount;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.util.DataChecksum;
@@ -66,12 +75,18 @@ import org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.util.StringUtils;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.hadoop.util.Time;
 import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.codehaus.jackson.map.ObjectReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
  * The underlying volume used to store replica.
@@ -84,6 +99,8 @@ public class FsVolumeImpl implements FsVolumeSpi {
   public static final Logger LOG =
       LoggerFactory.getLogger(FsVolumeImpl.class);
 
+  private static final String DU_CACHE_FILE = "dfsUsed";
+  private static final int SHUTDOWN_HOOK_PRIORITY = 30;
   private final FsDatasetImpl dataset;
   private final String storageID;
   private final StorageType storageType;
@@ -93,6 +110,9 @@ public class FsVolumeImpl implements FsVolumeSpi {
   private final DF usage;           
   private final long reserved;
   private CloseableReferenceCount reference = new CloseableReferenceCount();
+  private VolumnDU volumeUsage = null;
+  protected Configuration conf = null;
+  private volatile boolean dfsUsedSaved = false;
 
   // Disk space reserved for open blocks.
   private AtomicLong reservedForRbw;
@@ -125,6 +145,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
     this.storageType = storageType;
     this.configuredCapacity = -1;
     cacheExecutor = initializeCacheExecutor(parent);
+    this.conf = conf;
   }
 
   protected ThreadPoolExecutor initializeCacheExecutor(File parent) {
@@ -283,6 +304,11 @@ public class FsVolumeImpl implements FsVolumeSpi {
   }
 
   void decDfsUsed(String bpid, long value) {
+    try {
+      this.getVolumeUsage().decDfsUsed(value);
+    } catch (IOException e) {
+      LOG.error("ERROR when get volumn DU", e);
+    }
     synchronized(dataset) {
       BlockPoolSlice bp = bpSlices.get(bpid);
       if (bp != null) {
@@ -292,6 +318,11 @@ public class FsVolumeImpl implements FsVolumeSpi {
   }
 
   void incDfsUsed(String bpid, long value) {
+    try {
+      this.getVolumeUsage().incDfsUsed(value);
+    } catch (IOException e) {
+      LOG.error("ERROR when get volumn DU", e);
+    }
     synchronized(dataset) {
       BlockPoolSlice bp = bpSlices.get(bpid);
       if (bp != null) {
@@ -302,13 +333,187 @@ public class FsVolumeImpl implements FsVolumeSpi {
 
   @VisibleForTesting
   public long getDfsUsed() throws IOException {
-    long dfsUsed = 0;
-    synchronized(dataset) {
-      for(BlockPoolSlice s : bpSlices.values()) {
-        dfsUsed += s.getDfsUsed();
+//    long dfsUsed = 0;
+//    synchronized(dataset) {
+//      for(BlockPoolSlice s : bpSlices.values()) {
+//        dfsUsed += s.getDfsUsed();
+//      }
+//    }
+//    return dfsUsed;
+    long volumnUesd = this.getVolumeUsage().getUsed();
+    //  long bpUsed = 0;
+    //  int size = 0;
+    //  synchronized(dataset) {
+    //    for(BlockPoolSlice s : bpSlices.values()) {
+    //      bpUsed += s.getDfsUsed();
+    //    }
+    //    size = bpSlices.size();
+    //  }
+    return volumnUesd;
+  }
+
+  class VolumnDU extends DU {
+
+    public VolumnDU() throws IOException {
+      super(currentDir, conf, loadDfsUsed());
+    }
+
+    @Override
+    protected String[] getExecString() {
+      synchronized (dataset) {
+        String[] cmd = new String[bpSlices.size() + 2];
+        cmd[0] = "du";
+        cmd[1] = "-sk";
+        int i = 2;
+        for (BlockPoolSlice s : bpSlices.values()) {
+          cmd[i] = s.getDirectory().getAbsolutePath();
+          ++i;
+        }
+        return cmd;
       }
     }
-    return dfsUsed;
+
+    @Override
+    protected Runnable getNewRefreshThreadInstance() {
+      return new Runnable() {
+        @Override
+        public void run() {
+          boolean interrupted = false;
+          while (isShouldRun()) {
+            try {
+              if(!interrupted) {
+                Thread.sleep(getRefreshInterval());
+              }
+              interrupted = false;
+              try {
+                //update the used variable
+                VolumnDU.this.run();
+              } catch (IOException e) {
+                synchronized (VolumnDU.this) {
+                  //save the latest exception so we can return it in getUsed()
+                  setDuException(e);
+                }
+
+                LOG.warn("Could not get disk usage information", e);
+              }
+            } catch (InterruptedException e) {
+              interrupted = true;
+            }
+          }
+        }
+      };
+    }
+
+    public void recompute() {
+      getRefreshUsed().interrupt();
+    }
+
+    @Override
+    protected void parseExecResult(BufferedReader lines) throws IOException {
+      String line = null;
+      long usedBytes = 0;
+      while ((line = lines.readLine()) != null) {
+        String[] tokens = line.split("\t");
+        if(tokens.length < 2) {
+          throw new IOException("Illegal du output : " + line);
+        }
+        if(tokens[1].trim().equals(".")) {
+          continue;
+        }
+        if(NumberUtils.isNumber(tokens[0])) {
+          usedBytes += Long.parseLong(tokens[0])*1024;
+        }
+      }
+      if(usedBytes < 0) {
+        throw new IOException("Illegal du output:" + usedBytes);
+      }
+      setUsed(usedBytes);
+    }
+  }
+
+  private DU getVolumeUsage() throws IOException {
+    if(this.volumeUsage == null) {
+      synchronized (this) {
+        if(this.volumeUsage == null) {
+          this.volumeUsage = new VolumnDU();
+          volumeUsage.start();
+        }
+        ShutdownHookManager.get().addShutdownHook(
+                new Runnable() {
+                  @Override
+                  public void run() {
+                    if(!dfsUsedSaved) {
+                      saveDfsUsed();
+                    }
+                  }
+                }, SHUTDOWN_HOOK_PRIORITY);
+      }
+    }
+    return volumeUsage;
+  }
+
+  void saveDfsUsed() {
+    File outFile = new File(currentDir, DU_CACHE_FILE);
+    if(outFile.exists() && !outFile.delete()) {
+      LOG.warn("Failed to delete old dfsUsed file in " +
+              outFile.getParent());
+    }
+
+    FileWriter out = null;
+    try {
+      long used = getDfsUsed();
+      if(used > 0) {
+        out = new FileWriter(outFile);
+        // mtime is written last, so that truncated writes won't be valid.
+        out.write(Long.toString(used) + " " + Long.toString(Time.now()));
+        out.flush();
+        out.close();
+        out = null;
+      }
+    } catch (IOException ioe) {
+      // If write failed, the volume might be bad. Since the cache file is
+      // not critical, log the error and continue.
+      LOG.warn("Failed to write dfsUsed to " + outFile, ioe);
+    } finally {
+      IOUtils.cleanup(null, out);
+    }
+  }
+
+  long loadDfsUsed() {
+    long cachedDfsUsed;
+    long mtime;
+    Scanner sc;
+
+    try {
+      sc = new Scanner(new File(currentDir, DU_CACHE_FILE));
+    } catch (FileNotFoundException fnfe) {
+      return -1;
+    }
+
+    try {
+      // Get the recorded dfsUsed from the file.
+      if(sc.hasNextLong()) {
+        cachedDfsUsed = sc.nextLong();
+      } else {
+        return -1;
+      }
+      // Get the recorded mtime from the file.
+      if(sc.hasNextLong()) {
+        mtime = sc.nextLong();
+      } else {
+        return -1;
+      }
+
+      // Return the cached value if mtime is okay.
+      if(mtime > 0 && (Time.now() - mtime < 600000L)) {
+        LOG.info("Cached dfsUsed found for " + currentDir + ": " +
+                cachedDfsUsed);
+        return cachedDfsUsed;
+      }
+      return -1;
+    } finally {
+      sc.close();
+    }
   }
 
   long getBlockPoolUsed(String bpid) throws IOException {
@@ -822,7 +1027,15 @@ public class FsVolumeImpl implements FsVolumeSpi {
                          File f, long bytesReservedForRbw)
       throws IOException {
     releaseReservedSpace(bytesReservedForRbw);
-    return getBlockPoolSlice(bpid).addBlock(b, f);
+//    return getBlockPoolSlice(bpid).addBlock(b, f);
+    File blockFile = getBlockPoolSlice(bpid).addBlock(b, f);
+    File metaFile = FsDatasetUtil.getMetaFile(blockFile, b.getGenerationStamp());
+    try {
+      this.getVolumeUsage().incDfsUsed(b.getNumBytes() + metaFile.length());
+    } catch (IOException e) {
+      LOG.error("ERROR when get volumn DU", e);
+    }
+    return blockFile;
   }
 
   Executor getCacheExecutor() {
@@ -859,9 +1072,15 @@ public class FsVolumeImpl implements FsVolumeSpi {
     if (cacheExecutor != null) {
       cacheExecutor.shutdown();
     }
+    saveDfsUsed();
+    dfsUsedSaved = true;
     Set<Entry<String, BlockPoolSlice>> set = bpSlices.entrySet();
     for (Entry<String, BlockPoolSlice> entry : set) {
       entry.getValue().shutdown();
+    }
+
+    if(volumeUsage != null) {
+      volumeUsage.shutdown();
     }
   }
 
@@ -874,9 +1093,15 @@ public class FsVolumeImpl implements FsVolumeSpi {
   void shutdownBlockPool(String bpid) {
     BlockPoolSlice bp = bpSlices.get(bpid);
     if (bp != null) {
+      try {
+        volumeUsage.decDfsUsed(bp.getDfsUsed());
+      } catch (IOException e) {
+        LOG.error("ERROR when gdec volumn DU", e);
+      }
       bp.shutdown();
     }
     bpSlices.remove(bpid);
+    volumeUsage.recompute();
   }
 
   boolean isBPDirEmpty(String bpid) throws IOException {

@@ -37,6 +37,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.DU;
 import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.HardLink;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -46,6 +47,7 @@ import org.apache.hadoop.hdfs.server.datanode.DatanodeUtil;
 import org.apache.hadoop.hdfs.server.datanode.FinalizedReplica;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaInfo;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaBeingWritten;
+import org.apache.hadoop.hdfs.server.datanode.ReplicaInfo;
 import org.apache.hadoop.hdfs.server.datanode.ReplicaWaitingToBeRecovered;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.nativeio.NativeIO;
@@ -679,4 +681,15 @@ class BlockPoolSlice {
     dfsUsedSaved = true;
     dfsUsage.shutdown();
   }
+
+  public File hardLinkOneBlock(File src, File srcMeta, Block dstBlock) throws IOException {
+    File dstMeta = new File(tmpDir, DatanodeUtil.getMetaName(dstBlock.getBlockName(), dstBlock.getGenerationStamp()));
+    HardLink.createHardLink(srcMeta, dstMeta);
+
+    File dstBlockFile = new File(tmpDir, dstBlock.getBlockName());
+    HardLink.createHardLink(src, dstBlockFile);
+
+    return dstBlockFile;
+  }
+
 }
