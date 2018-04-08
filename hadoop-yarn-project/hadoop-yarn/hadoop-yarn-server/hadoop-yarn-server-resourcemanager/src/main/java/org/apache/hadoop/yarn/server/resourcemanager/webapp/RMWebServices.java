@@ -727,8 +727,14 @@ public class RMWebServices {
     if (!app.getState().toString().equals(targetState.getState())) {
       // user is attempting to change state. right we only
       // allow users to kill the app
-
       if (targetState.getState().equals(YarnApplicationState.KILLED.toString())) {
+
+        LOG.info("app logs,killer ip is :"+hsr.getRemoteAddr()
+                + ". app id :"+appId + ", app owner :"+app.getUser());
+        LOG.info("app logs,killer ip is :"+hsr.getRemoteHost()
+                + ". app id :"+appId + ", app owner :"+app.getUser());
+
+
         return killApp(app, callerUGI, hsr);
       }
       throw new BadRequestException("Only '"
