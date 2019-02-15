@@ -52,7 +52,7 @@ public class Trash extends Configured {
    * @param fs the FileSystem
    * @param conf a Configuration
    */
-  public Trash(FileSystem fs, Configuration conf) throws IOException {
+  public Trash(FileSystem fs, Configuration conf){
     super(conf);
     trashPolicy = TrashPolicy.getInstance(conf, fs, fs.getHomeDirectory(conf));
   }

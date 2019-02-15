@@ -111,18 +111,18 @@ public class TrashPolicyDefault extends TrashPolicy {
 
     if (!path.isAbsolute())                       // make path absolute
       path = new Path(fs.getWorkingDirectory(), path);
-    LOG.debug("first path is : "+path);
+    LOG.debug("first path is : " + path);
 
     if (!fs.exists(path))                         // check that path exists
       throw new FileNotFoundException(path.toString());
 
     String qpath = fs.makeQualified(path).toString();
-    LOG.debug("qpath path is : "+qpath);
+    LOG.debug("qpath path is : " + qpath);
 
     if (qpath.startsWith(trash.toString())) {
       return false;                               // already in trash
     }
-    LOG.debug("trash parent path is : "+trash.getParent().toString());
+    LOG.debug("trash parent path is : " + trash.getParent().toString());
 
     if (trash.getParent().toString().startsWith(qpath)) {
       throw new IOException("Cannot move \"" + path +

@@ -1852,6 +1852,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   //    <name>fs.special.trash.path</name>
   //    <value>semacare,/thirdparty/semacare</value>
   //</property>
+
     String special_path = conf.get(CommonConfigurationKeys.HDFS_SPECIAL_TRASH_PATH_KEY,"not.set.path");
     String[] userTrashs = StringUtils.split(special_path, ';');
     for (int i = 0; i < userTrashs.length; i++) {

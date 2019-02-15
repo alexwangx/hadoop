@@ -380,5 +380,6 @@ public class CommonConfigurationKeysPublic {
   public static final String HDFS_SPECIAL_TRASH_PATH_KEY =
           "fs.special.trash.path";
 
+
 }
 
